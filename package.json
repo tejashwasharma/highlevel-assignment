@@ -1,0 +1,19 @@
+{
+  "name": "highlevel-assignment",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SDE-3 take-home: Bulk Stage Move (Opportunities pipeline engine)",
+  "main": "dist/server.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.19.43",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "express": "^5.2.1"
+  }
+}
