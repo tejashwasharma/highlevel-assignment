@@ -56,6 +56,15 @@ export class OpportunitiesRepository {
       ? (JSON.parse(decodeCursor(cursor)) as ListCursorPayload)
       : null;
 
+    const stageRows = await this.db.query(`SELECT 1 FROM stages WHERE id = $1 AND workspace_id = $2`, [
+      stageId,
+      workspaceId,
+    ]);
+
+    if (stageRows.length === 0) {
+      throw new NotFoundError(ERROR_CODES.STAGE_NOT_FOUND);
+    }
+
     // Fetch one extra row (limit + 1) so we know "is there a next page"
     const rows = await this.db.query<OpportunityRow>(
       `SELECT *, created_at::text AS created_at_cursor FROM opportunities
