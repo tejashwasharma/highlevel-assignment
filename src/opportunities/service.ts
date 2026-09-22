@@ -1,5 +1,5 @@
 import { OpportunitiesRepository } from './repository';
-import { CreateOpportunityInput, Opportunity } from './types';
+import { CreateOpportunityInput, Opportunity, ListOpportunitiesPage } from './types';
 import { ValidationError } from '../shared/errors';
 import { ERROR_CODES } from '../shared/constants/error-codes';
 
@@ -18,5 +18,14 @@ export class OpportunitiesService {
       throw new ValidationError(ERROR_CODES.OPPORTUNITY_STATUS_INVALID);
     }
     return this.repository.createOpportunity({ ...input, status });
+  }
+
+  async listOpportunitiesInStage(
+    workspaceId: string,
+    stageId: string,
+    cursor: string | null,
+    limit: number,
+  ): Promise<ListOpportunitiesPage> {
+    return this.repository.listOpportunitiesInStage(workspaceId, stageId, cursor, limit);
   }
 }

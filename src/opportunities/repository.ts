@@ -1,7 +1,16 @@
-import { Opportunity, CreateOpportunityInput, OpportunityRow } from './types';
+import {
+  Opportunity,
+  CreateOpportunityInput,
+  ListOpportunitiesPage,
+  OpportunityRow,
+  ListCursorPayload,
+} from './types';
 import { Database } from '../db/database';
 import { NotFoundError } from '../shared/errors';
 import { ERROR_CODES } from '../shared/constants/error-codes';
+import { encodeCursor, decodeCursor } from '../utils/cursor';
+
+const DEFAULT_LIST_LIMIT = 50;
 
 export class OpportunitiesRepository {
   constructor(private readonly db: Database) {}
@@ -35,5 +44,37 @@ export class OpportunitiesRepository {
     }
 
     return OpportunitiesRepository.mapOpportunity(rows[0]);
+  }
+
+  async listOpportunitiesInStage(
+    workspaceId: string,
+    stageId: string,
+    cursor: string | null,
+    limit: number = DEFAULT_LIST_LIMIT,
+  ): Promise<ListOpportunitiesPage> {
+    const after: ListCursorPayload | null = cursor
+      ? (JSON.parse(decodeCursor(cursor)) as ListCursorPayload)
+      : null;
+
+    // Fetch one extra row (limit + 1) so we know "is there a next page"
+    const rows = await this.db.query<OpportunityRow>(
+      `SELECT *, created_at::text AS created_at_cursor FROM opportunities
+       WHERE workspace_id = $1 AND stage_id = $2
+         AND ($3::timestamptz IS NULL OR (created_at, id) > ($3::timestamptz, $4::uuid))
+       ORDER BY created_at, id
+       LIMIT $5`,
+      [workspaceId, stageId, after?.createdAt ?? null, after?.id ?? null, limit + 1],
+    );
+
+    const hasMore = rows.length > limit;
+    const pageRows = rows.slice(0, limit);
+    const items = pageRows.map(OpportunitiesRepository.mapOpportunity);
+    const lastRow = pageRows[pageRows.length - 1];
+    const nextCursor =
+      hasMore && lastRow
+        ? encodeCursor(JSON.stringify({ createdAt: lastRow.created_at_cursor, id: lastRow.id }))
+        : null;
+
+    return { items, nextCursor };
   }
 }

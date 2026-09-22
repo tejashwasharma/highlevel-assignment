@@ -31,4 +31,15 @@ export interface OpportunityRow {
   version: number;
   created_at: Date;
   updated_at: Date;
+  created_at_cursor?: string;
+}
+
+export interface ListOpportunitiesPage {
+  items: Opportunity[];
+  nextCursor: string | null;
+}
+
+export interface ListCursorPayload {
+  createdAt: string;
+  id: string;
 }
