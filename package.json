@@ -6,14 +6,20 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/server.js"
+    "start": "dotenv -e .env -- node dist/server.js",
+    "migrate": "dotenv -e .env -- node-pg-migrate --migrations-dir db/migrations up",
+    "migrate:down": "dotenv -e .env -- node-pg-migrate --migrations-dir db/migrations down"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^20.19.43",
+    "@types/pg": "^8.23.1",
+    "dotenv-cli": "^11.0.0",
+    "node-pg-migrate": "^9.0.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "express": "^5.2.1"
+    "express": "^5.2.1",
+    "pg": "^8.23.0"
   }
 }
