@@ -6,7 +6,7 @@
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "start": "dotenv -e .env -- node dist/server.js",
+    "start": "tsc -p tsconfig.json && dotenv -e .env -- node dist/server.js",
     "migrate": "dotenv -e .env -- node-pg-migrate --migrations-dir db/migrations up",
     "migrate:down": "dotenv -e .env -- node-pg-migrate --migrations-dir db/migrations down"
   },
