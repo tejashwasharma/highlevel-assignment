@@ -6,11 +6,31 @@ import {
   ListCursorPayload,
 } from './types';
 import { Database } from '../db/database';
-import { NotFoundError } from '../shared/errors';
+import { NotFoundError, ValidationError } from '../shared/errors';
 import { ERROR_CODES } from '../shared/constants/error-codes';
 import { encodeCursor, decodeCursor } from '../utils/cursor';
 
 const DEFAULT_LIST_LIMIT = 50;
+
+function parseCursor(cursor: string): ListCursorPayload {
+  let payload: unknown;
+  try {
+    payload = JSON.parse(decodeCursor(cursor));
+  } catch {
+    throw new ValidationError(ERROR_CODES.INVALID_CURSOR);
+  }
+
+  if (
+    typeof payload !== 'object' ||
+    payload === null ||
+    typeof (payload as ListCursorPayload).createdAt !== 'string' ||
+    typeof (payload as ListCursorPayload).id !== 'string'
+  ) {
+    throw new ValidationError(ERROR_CODES.INVALID_CURSOR);
+  }
+
+  return payload as ListCursorPayload;
+}
 
 export class OpportunitiesRepository {
   constructor(private readonly db: Database) {}
@@ -52,9 +72,7 @@ export class OpportunitiesRepository {
     cursor: string | null,
     limit: number = DEFAULT_LIST_LIMIT,
   ): Promise<ListOpportunitiesPage> {
-    const after: ListCursorPayload | null = cursor
-      ? (JSON.parse(decodeCursor(cursor)) as ListCursorPayload)
-      : null;
+    const after: ListCursorPayload | null = cursor ? parseCursor(cursor) : null;
 
     const stageRows = await this.db.query(`SELECT 1 FROM stages WHERE id = $1 AND workspace_id = $2`, [
       stageId,
