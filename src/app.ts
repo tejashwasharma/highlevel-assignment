@@ -1,7 +1,7 @@
+import 'reflect-metadata';
 import express, { Express } from 'express';
 import { getInteractivePool } from './db/pool';
 import { Database } from './db/database';
-import { workspaceScope } from './shared/workspace-scope';
 import { errorHandler } from './shared/error-handler';
 import { opportunitiesRouter } from './opportunities/routes';
 import { OpportunitiesController } from './opportunities/controller';
@@ -21,7 +21,7 @@ export function createApp(): Express {
   const opportunitiesService = new OpportunitiesService(opportunitiesRepository);
   const opportunitiesController = new OpportunitiesController(opportunitiesService);
 
-  app.use(workspaceScope, opportunitiesRouter(opportunitiesController));
+  app.use(opportunitiesRouter(opportunitiesController));
 
   app.use(errorHandler);
 
