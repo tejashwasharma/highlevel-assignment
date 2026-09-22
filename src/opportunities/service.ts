@@ -20,6 +20,25 @@ export class OpportunitiesService {
     return this.repository.createOpportunity({ ...input, status });
   }
 
+  async moveOpportunity(
+    workspaceId: string,
+    opportunityId: string,
+    toStageId: string,
+    expectedVersion: number,
+    movedBy: string | null,
+  ): Promise<Opportunity> {
+    if (!toStageId || !Number.isFinite(expectedVersion)) {
+      throw new ValidationError(ERROR_CODES.MOVE_FIELDS_REQUIRED);
+    }
+    return this.repository.moveOpportunity(
+      workspaceId,
+      opportunityId,
+      toStageId,
+      expectedVersion,
+      movedBy,
+    );
+  }
+
   async listOpportunitiesInStage(
     workspaceId: string,
     stageId: string,

@@ -6,7 +6,7 @@ import {
   ListCursorPayload,
 } from './types';
 import { Database } from '../db/database';
-import { NotFoundError, ValidationError } from '../shared/errors';
+import { NotFoundError, ConflictError, ValidationError } from '../shared/errors';
 import { ERROR_CODES } from '../shared/constants/error-codes';
 import { encodeCursor, decodeCursor } from '../utils/cursor';
 
@@ -64,6 +64,56 @@ export class OpportunitiesRepository {
     }
 
     return OpportunitiesRepository.mapOpportunity(rows[0]);
+  }
+
+  async moveOpportunity(
+    workspaceId: string,
+    opportunityId: string,
+    toStageId: string,
+    expectedVersion: number,
+    movedBy: string | null,
+  ): Promise<Opportunity> {
+    return this.db.transaction(async (client) => {
+      const currentResult = await client.query<OpportunityRow>(
+        `SELECT * FROM opportunities WHERE id = $1 AND workspace_id = $2 FOR UPDATE`,
+        [opportunityId, workspaceId],
+      );
+
+      if (currentResult.rowCount === 0) {
+        throw new NotFoundError(ERROR_CODES.OPPORTUNITY_NOT_FOUND);
+      }
+
+      const currentRow = currentResult.rows[0];
+
+      if (currentRow.version !== expectedVersion) {
+        throw new ConflictError(ERROR_CODES.VERSION_CONFLICT);
+      }
+
+      const stageResult = await client.query(
+        `SELECT 1 FROM stages WHERE id = $1 AND workspace_id = $2`,
+        [toStageId, workspaceId],
+      );
+
+      if (stageResult.rowCount === 0) {
+        throw new NotFoundError(ERROR_CODES.STAGE_NOT_FOUND);
+      }
+
+      const updatedResult = await client.query<OpportunityRow>(
+        `UPDATE opportunities
+         SET stage_id = $1, version = version + 1, updated_at = now()
+         WHERE id = $2
+         RETURNING *`,
+        [toStageId, opportunityId],
+      );
+
+      await client.query(
+        `INSERT INTO transitions (workspace_id, opportunity_id, from_stage_id, to_stage_id, moved_by)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [workspaceId, opportunityId, currentRow.stage_id, toStageId, movedBy],
+      );
+
+      return OpportunitiesRepository.mapOpportunity(updatedResult.rows[0]);
+    });
   }
 
   async listOpportunitiesInStage(

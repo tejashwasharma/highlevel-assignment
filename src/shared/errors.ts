@@ -18,6 +18,12 @@ export class NotFoundError extends AppError {
   }
 }
 
+export class ConflictError extends AppError {
+  constructor(code: ErrorCode) {
+    super(code, HTTP_STATUS.CONFLICT);
+  }
+}
+
 export class ValidationError extends AppError {
   constructor(code: ErrorCode) {
     super(code, HTTP_STATUS.BAD_REQUEST);

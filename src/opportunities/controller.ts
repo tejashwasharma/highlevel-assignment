@@ -25,6 +25,21 @@ export class OpportunitiesController {
     res.status(HTTP_STATUS.CREATED).json(opportunity);
   };
 
+  moveOpportunity = async (req: Request, res: Response): Promise<void> => {
+    const { workspaceId } = req as ScopedRequest;
+    const { toStageId, expectedVersion, movedBy } = req.body;
+
+    const opportunity = await this.service.moveOpportunity(
+      workspaceId,
+      String(req.params.id),
+      toStageId,
+      Number(expectedVersion),
+      movedBy ?? null,
+    );
+
+    res.status(HTTP_STATUS.OK).json(opportunity);
+  };
+
   listOpportunitiesInStage = async (req: Request, res: Response): Promise<void> => {
     const { workspaceId } = req as ScopedRequest;
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : null;
