@@ -29,6 +29,7 @@ export interface BulkMoveJob {
 
 export interface SubmitBulkMoveInput {
   workspaceId: string;
+  filterHash: string;
   filter: BulkMoveFilterInput;
   targetStageId: string;
 }

@@ -29,6 +29,7 @@ export function createApp(): Express {
   const bulkMovesService = new BulkMovesService(bulkMovesRepository);
   const bulkMovesController = new BulkMovesController(bulkMovesService);
 
+  // Ratelimiting middleware can be added here to handle burst traffic and prevent abuse
   app.use(opportunitiesRouter(opportunitiesController));
   app.use(bulkMovesRouter(bulkMovesController));
 

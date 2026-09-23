@@ -1,4 +1,5 @@
 import { BulkMovesRepository } from './repository';
+import { writeDedupeState } from './dedupe';
 import { sleep } from '../utils/sleep';
 import { logger } from '../utils/logger';
 
@@ -22,7 +23,11 @@ export async function runWorkerLoop(
     const items = await repository.claimNextChunk(job.id, job.cursorId, CHUNK_SIZE);
 
     if (items.length === 0) {
-      await repository.markJobCompleted(job.id);
+      const completed = await repository.markJobCompleted(job.id);
+      await writeDedupeState(completed.workspaceId, completed.filterHash, {
+        id: completed.id,
+        status: completed.status,
+      });
       logger.info('bulk move job completed', { jobId: job.id, workspaceId: job.workspaceId });
       continue;
     }
@@ -34,6 +39,8 @@ export async function runWorkerLoop(
       skippedCount: result.skippedCount,
       lastItemId: result.lastItemId,
     });
+
+    await writeDedupeState(job.workspaceId, job.filterHash, { id: job.id, status: 'running' });
 
     await sleep(CHUNK_PACING_DELAY_MS);
   }
