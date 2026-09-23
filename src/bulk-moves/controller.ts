@@ -19,4 +19,12 @@ export class BulkMovesController {
 
     res.status(HTTP_STATUS.CREATED).json(job);
   };
+
+  getBulkMoveProgress = async (req: Request, res: Response): Promise<void> => {
+    const { workspaceId } = req as ScopedRequest;
+
+    const job = await this.service.getBulkMoveProgress(workspaceId, String(req.params.id));
+
+    res.status(HTTP_STATUS.OK).json(job);
+  };
 }

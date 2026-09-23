@@ -13,6 +13,11 @@ export function bulkMovesRouter(controller: BulkMovesController): Router {
     validateDto(CreateBulkMoveDto),
     controller.submitBulkMove,
   );
+  router.get(
+    '/bulk-moves/:id',
+    workspaceScope,
+    controller.getBulkMoveProgress
+  );
 
   return router;
 }

@@ -124,4 +124,17 @@ export class BulkMovesRepository {
       return BulkMovesRepository.mapJob(updatedJobRow.rows[0]);
     });
   }
+
+  async getJob(workspaceId: string, jobId: string): Promise<BulkMoveJob> {
+    const rows = await this.db.query<BulkMoveJobRow>(
+      `SELECT * FROM bulk_move_jobs WHERE workspace_id = $1 AND id = $2`,
+      [workspaceId, jobId],
+    );
+
+    if (rows.length === 0) {
+      throw new NotFoundError(ERROR_CODES.BULK_MOVE_JOB_NOT_FOUND);
+    }
+
+    return BulkMovesRepository.mapJob(rows[0]);
+  }
 }

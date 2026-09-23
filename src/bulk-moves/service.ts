@@ -15,4 +15,8 @@ export class BulkMovesService {
       input.targetStageId,
     );
   }
+
+  async getBulkMoveProgress(workspaceId: string, jobId: string): Promise<BulkMoveJob> {
+    return this.repository.getJob(workspaceId, jobId);
+  }
 }
