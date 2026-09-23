@@ -5,6 +5,7 @@ RUN npm ci
 COPY tsconfig.json tsconfig.test.json jest.config.js ./
 COPY src ./src
 COPY test ./test
+COPY scripts ./scripts
 RUN npm run build
 
 FROM node:20-alpine
