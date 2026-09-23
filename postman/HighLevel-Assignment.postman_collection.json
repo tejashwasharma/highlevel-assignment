@@ -1,0 +1,252 @@
+{
+  "info": {
+    "_postman_id": "1bb577b0-10f3-4d30-98a2-66fde2f70f64",
+    "name": "highlevel-assignment",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Opportunities",
+      "item": [
+        {
+          "name": "Create Opportunity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.environment.set('opportunityId', body.id);",
+                  "  pm.environment.set('opportunityVersion', body.version);",
+                  "}",
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Workspace-Id", "value": "{{workspaceId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Acme Corp deal\",\n  \"value\": 15000,\n  \"status\": \"open\",\n  \"owner\": \"alice\",\n  \"stageId\": \"{{stageAId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/opportunities",
+              "host": ["{{baseUrl}}"],
+              "path": ["opportunities"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Opportunity - validation error",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Workspace-Id", "value": "{{workspaceId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": 15000,\n  \"owner\": \"alice\",\n  \"stageId\": \"{{stageAId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/opportunities",
+              "host": ["{{baseUrl}}"],
+              "path": ["opportunities"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Move Opportunity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.environment.set('opportunityVersion', body.version);",
+                  "}",
+                  "pm.test('status is 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Workspace-Id", "value": "{{workspaceId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"toStageId\": \"{{stageBId}}\",\n  \"expectedVersion\": {{opportunityVersion}},\n  \"movedBy\": \"alice\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/opportunities/{{opportunityId}}/move",
+              "host": ["{{baseUrl}}"],
+              "path": ["opportunities", "{{opportunityId}}", "move"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Move Opportunity - stale version (409)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Workspace-Id", "value": "{{workspaceId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"toStageId\": \"{{stageAId}}\",\n  \"expectedVersion\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/opportunities/{{opportunityId}}/move",
+              "host": ["{{baseUrl}}"],
+              "path": ["opportunities", "{{opportunityId}}", "move"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List Opportunities in Stage",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Workspace-Id", "value": "{{workspaceId}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/stages/{{stageAId}}/opportunities?limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["stages", "{{stageAId}}", "opportunities"],
+              "query": [
+                { "key": "limit", "value": "20" },
+                { "key": "cursor", "value": "", "disabled": true }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Bulk Moves",
+      "item": [
+        {
+          "name": "Submit Bulk Move",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.environment.set('jobId', body.id);",
+                  "}",
+                  "pm.test('status is 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Workspace-Id", "value": "{{workspaceId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filter\": {\n    \"status\": \"open\"\n  },\n  \"targetStageId\": \"{{stageBId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bulk-moves",
+              "host": ["{{baseUrl}}"],
+              "path": ["bulk-moves"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Bulk Move - full filter example",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Workspace-Id", "value": "{{workspaceId}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"filter\": {\n    \"status\": \"open\",\n    \"owner\": \"alice\",\n    \"valueMin\": 1000,\n    \"valueMax\": 50000,\n    \"createdAfter\": \"2026-01-01T00:00:00Z\",\n    \"createdBefore\": \"2026-06-01T00:00:00Z\"\n  },\n  \"targetStageId\": \"{{stageBId}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/bulk-moves",
+              "host": ["{{baseUrl}}"],
+              "path": ["bulk-moves"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Bulk Move Progress",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Workspace-Id", "value": "{{workspaceId}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bulk-moves/{{jobId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["bulk-moves", "{{jobId}}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Bulk Move Progress - not found (404)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "X-Workspace-Id", "value": "{{workspaceId}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/bulk-moves/00000000-0000-0000-0000-000000000000",
+              "host": ["{{baseUrl}}"],
+              "path": ["bulk-moves", "00000000-0000-0000-0000-000000000000"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
