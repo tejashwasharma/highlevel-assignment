@@ -3,6 +3,7 @@ import express, { Express } from 'express';
 import { getInteractivePool } from './db/pool';
 import { Database } from './db/database';
 import { errorHandler } from './shared/error-handler';
+import { requestLogger } from './shared/request-logger';
 import { opportunitiesRouter } from './opportunities/routes';
 import { OpportunitiesController } from './opportunities/controller';
 import { OpportunitiesService } from './opportunities/service';
@@ -15,6 +16,7 @@ import { BulkMovesRepository } from './bulk-moves/repository';
 export function createApp(): Express {
   const app = express();
   app.use(express.json());
+  app.use(requestLogger);
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
