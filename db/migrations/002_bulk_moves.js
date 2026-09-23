@@ -4,19 +4,20 @@
 exports.up = (pgm) => {
   pgm.sql(`
     CREATE TABLE bulk_move_jobs (
-      id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      workspace_id    UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-      filter_hash     TEXT NOT NULL,
-      filter          JSONB NOT NULL,
-      target_stage_id UUID NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
-      status          TEXT NOT NULL DEFAULT 'pending'
-                        CHECK (status IN ('pending', 'running', 'completed', 'failed')),
-      total_items     INTEGER NOT NULL DEFAULT 0,
-      done_count      INTEGER NOT NULL DEFAULT 0,
-      skipped_count   INTEGER NOT NULL DEFAULT 0,
-      cursor_id       BIGINT,
-      created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+      id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id            UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+      filter_hash             TEXT NOT NULL,
+      filter                  JSONB NOT NULL,
+      target_stage_id         UUID NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
+      status                  TEXT NOT NULL DEFAULT 'pending'
+                              CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+      total_items             INTEGER NOT NULL DEFAULT 0,
+      done_count              INTEGER NOT NULL DEFAULT 0,
+      skipped_count           INTEGER NOT NULL DEFAULT 0,
+      skipped_opportunity_ids UUID[] NOT NULL DEFAULT '{}',
+      cursor_id               BIGINT,
+      created_at              TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at              TIMESTAMPTZ NOT NULL DEFAULT now()
     );
 
     CREATE UNIQUE INDEX idx_bulk_move_jobs_dedupe

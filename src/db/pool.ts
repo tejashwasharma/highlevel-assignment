@@ -1,6 +1,7 @@
 import { Pool } from 'pg';
 
 let interactivePool: Pool | undefined;
+let workerPool: Pool | undefined;
 
 function requireConnectionString(): string {
   const connectionString = process.env.DATABASE_URL;
@@ -15,4 +16,11 @@ export function getInteractivePool(): Pool {
     interactivePool = new Pool({ connectionString: requireConnectionString(), max: 20 });
   }
   return interactivePool;
+}
+
+export function getWorkerPool(): Pool {
+  if (!workerPool) {
+    workerPool = new Pool({ connectionString: requireConnectionString(), max: 5 });
+  }
+  return workerPool;
 }

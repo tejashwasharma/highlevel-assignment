@@ -1,4 +1,11 @@
-import { BulkMoveJob, BulkMoveJobRow, BulkMoveFilterInput } from './types';
+import {
+  BulkMoveJob,
+  BulkMoveJobRow,
+  BulkMoveJobItem,
+  BulkMoveJobItemRow,
+  BulkMoveFilterInput,
+  ChunkApplyResult,
+} from './types';
 import { Database } from '../db/database';
 import { NotFoundError } from '../shared/errors';
 import { ERROR_CODES } from '../shared/constants/error-codes';
@@ -43,6 +50,17 @@ export class BulkMovesRepository {
     return conditions.length > 0 ? ` AND ${conditions.join(' AND ')}` : '';
   }
 
+  private static mapJobItem(row: BulkMoveJobItemRow): BulkMoveJobItem {
+    return {
+      id: row.id,
+      jobId: row.job_id,
+      opportunityId: row.opportunity_id,
+      status: row.status,
+      expectedVersion: row.expected_version,
+      processedAt: row.processed_at,
+    };
+  }
+
   private static mapJob(row: BulkMoveJobRow): BulkMoveJob {
     return {
       id: row.id,
@@ -54,6 +72,7 @@ export class BulkMovesRepository {
       totalItems: row.total_items,
       doneCount: row.done_count,
       skippedCount: row.skipped_count,
+      skippedOpportunityIds: row.skipped_opportunity_ids,
       cursorId: row.cursor_id,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -136,5 +155,115 @@ export class BulkMovesRepository {
     }
 
     return BulkMovesRepository.mapJob(rows[0]);
+  }
+
+  async claimNextChunk(
+    jobId: string,
+    cursorId: number | null,
+    limit: number,
+  ): Promise<BulkMoveJobItem[]> {
+    const rows = await this.db.query<BulkMoveJobItemRow>(
+      `SELECT * FROM bulk_move_job_items
+       WHERE job_id = $1 AND ($2::bigint IS NULL OR id > $2::bigint)
+       ORDER BY id
+       LIMIT $3`,
+      [jobId, cursorId, limit],
+    );
+    return rows.map(BulkMovesRepository.mapJobItem);
+  }
+
+  async applyChunk(job: BulkMoveJob, items: BulkMoveJobItem[]): Promise<ChunkApplyResult> {
+    if (items.length === 0) {
+      return { doneCount: 0, skippedCount: 0, lastItemId: job.cursorId ?? 0 };
+    }
+
+    return this.db.transaction(async (client) => {
+      const opportunityIds = items.map((item) => item.opportunityId);
+      const expectedVersions = items.map((item) => item.expectedVersion);
+
+      const movedResult = await client.query<{ opportunity_id: string }>(
+        `WITH candidates AS (
+           SELECT unnest($1::uuid[]) AS opportunity_id, unnest($2::int[]) AS expected_version
+         ),
+         matched AS (
+           SELECT o.id, o.stage_id AS from_stage_id
+           FROM opportunities o
+           JOIN candidates c ON o.id = c.opportunity_id AND o.version = c.expected_version
+           FOR UPDATE OF o
+         ),
+         updated AS (
+           UPDATE opportunities o
+           SET stage_id = $3, version = o.version + 1, updated_at = now()
+           FROM matched m
+           WHERE o.id = m.id
+           RETURNING o.id AS opportunity_id, m.from_stage_id
+         )
+         INSERT INTO transitions (workspace_id, opportunity_id, from_stage_id, to_stage_id, moved_by)
+         SELECT $4, opportunity_id, from_stage_id, $3, $5
+         FROM updated
+         RETURNING opportunity_id`,
+        [opportunityIds, expectedVersions, job.targetStageId, job.workspaceId, `bulk-move:${job.id}`],
+      );
+
+      const movedOpportunityIds = new Set(movedResult.rows.map((row) => row.opportunity_id));
+
+      const doneItemIds: number[] = [];
+      const skippedItemIds: number[] = [];
+      const skippedOpportunityIds: string[] = [];
+      for (const item of items) {
+        if (movedOpportunityIds.has(item.opportunityId)) {
+          doneItemIds.push(item.id);
+        } else {
+          skippedItemIds.push(item.id);
+          skippedOpportunityIds.push(item.opportunityId);
+        }
+      }
+
+      if (doneItemIds.length > 0) {
+        await client.query(
+          `UPDATE bulk_move_job_items SET status = 'done', processed_at = now() WHERE id = ANY($1::bigint[])`,
+          [doneItemIds],
+        );
+      }
+      if (skippedItemIds.length > 0) {
+        await client.query(
+          `UPDATE bulk_move_job_items SET status = 'skipped_conflict', processed_at = now() WHERE id = ANY($1::bigint[])`,
+          [skippedItemIds],
+        );
+      }
+
+      const doneCount = doneItemIds.length;
+      const skippedCount = skippedItemIds.length;
+      const lastItemId = items[items.length - 1].id;
+
+      await client.query(
+        `UPDATE bulk_move_jobs
+         SET cursor_id = $1, done_count = done_count + $2, skipped_count = skipped_count + $3,
+             skipped_opportunity_ids = skipped_opportunity_ids || $4::uuid[],
+             status = 'running', updated_at = now()
+         WHERE id = $5`,
+        [lastItemId, doneCount, skippedCount, skippedOpportunityIds, job.id],
+      );
+
+      return { doneCount, skippedCount, lastItemId };
+    });
+  }
+
+  async markJobCompleted(jobId: string): Promise<BulkMoveJob> {
+    const rows = await this.db.query<BulkMoveJobRow>(
+      `UPDATE bulk_move_jobs SET status = 'completed', updated_at = now() WHERE id = $1 RETURNING *`,
+      [jobId],
+    );
+    return BulkMovesRepository.mapJob(rows[0]);
+  }
+
+  async findNextActiveJob(): Promise<BulkMoveJob | null> {
+    const rows = await this.db.query<BulkMoveJobRow>(
+      `SELECT * FROM bulk_move_jobs
+       WHERE status IN ('pending', 'running')
+       ORDER BY updated_at ASC
+       LIMIT 1`,
+    );
+    return rows[0] ? BulkMovesRepository.mapJob(rows[0]) : null;
   }
 }
