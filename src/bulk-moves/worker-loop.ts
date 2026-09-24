@@ -5,9 +5,8 @@ import { logger } from '../utils/logger';
 
 const CHUNK_SIZE = 500;
 const CHUNK_PACING_DELAY_MS = 100;
-const IDLE_POLL_INTERVAL_MS = 1000;
+const IDLE_POLL_INTERVAL_MS = 100;
 
-//should be triggered by kafka events from the main process, but for now just run forever
 export async function runWorkerLoop(
   repository: BulkMovesRepository,
   shouldContinue: () => boolean = () => true,
@@ -17,6 +16,20 @@ export async function runWorkerLoop(
 
     if (!job) {
       await sleep(IDLE_POLL_INTERVAL_MS);
+      continue;
+    }
+
+    if (job.status === 'materializing') {
+      const materialized = await repository.materializeSnapshot(job);
+      await writeDedupeState(materialized.workspaceId, materialized.filterHash, {
+        id: materialized.id,
+        status: materialized.status,
+      });
+      logger.info('materialized bulk move snapshot', {
+        jobId: job.id,
+        workspaceId: job.workspaceId,
+        totalItems: materialized.totalItems,
+      });
       continue;
     }
 

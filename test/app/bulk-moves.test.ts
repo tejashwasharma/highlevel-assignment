@@ -1,14 +1,16 @@
 import request from 'supertest';
 import { getTestApp } from '../helpers/app';
-import { getTestPool, closeTestPool } from '../helpers/db';
+import { getTestPool, getTestDatabase, closeTestPool } from '../helpers/db';
 import { seedWorkspace, seedOpportunities, cleanupWorkspace, TestWorkspace } from '../helpers/fixtures';
 import { getInteractivePool } from '../../src/db/pool';
 import { readDedupeHash, isRedisAvailable } from '../helpers/redis';
 import { getRedisClient } from '../../src/redis/client';
+import { BulkMovesRepository } from '../../src/bulk-moves/repository';
 
 describe('bulk-moves API', () => {
   const app = getTestApp();
   const pool = getTestPool();
+  const repository = new BulkMovesRepository(getTestDatabase());
   let workspace: TestWorkspace;
   let redisAvailable = false;
 
@@ -37,7 +39,7 @@ describe('bulk-moves API', () => {
   });
 
   describe('POST /bulk-moves', () => {
-    it('returns a minimal job handle, not a full report', async () => {
+    it('returns a minimal job handle immediately, without waiting for the snapshot', async () => {
       await seedOpportunities(pool, workspace.workspaceId, workspace.stageAId, 7, 'owner-a');
 
       const res = await request(app)
@@ -47,11 +49,16 @@ describe('bulk-moves API', () => {
 
       expect(res.status).toBe(201);
       expect(Object.keys(res.body).sort()).toEqual(['id', 'status']);
-      expect(res.body.status).toBe('pending');
+      expect(res.body.status).toBe('materializing');
       expect(res.body.id).toEqual(expect.any(String));
+
+      const itemCount = await pool.query(`SELECT count(*) FROM bulk_move_job_items WHERE job_id = $1`, [
+        res.body.id,
+      ]);
+      expect(Number(itemCount.rows[0].count)).toBe(0);
     });
 
-    it('snapshots every currently-matching opportunity into the job (verified in Postgres, since the response is minimal)', async () => {
+    it('snapshots every currently-matching opportunity once materialized (verified in Postgres, since the response is minimal)', async () => {
       await seedOpportunities(pool, workspace.workspaceId, workspace.stageAId, 7, 'owner-a');
       await seedOpportunities(pool, workspace.workspaceId, workspace.stageAId, 3, 'owner-b');
 
@@ -59,6 +66,10 @@ describe('bulk-moves API', () => {
         .post('/bulk-moves')
         .set('X-Workspace-Id', workspace.workspaceId)
         .send({ filter: { owner: 'owner-a' }, targetStageId: workspace.stageBId });
+
+      // simulates the worker picking up the materializing job
+      const job = await repository.getJob(workspace.workspaceId, res.body.id);
+      await repository.materializeSnapshot(job);
 
       const jobRow = await pool.query(
         `SELECT total_items, done_count FROM bulk_move_jobs WHERE id = $1`,
@@ -73,14 +84,18 @@ describe('bulk-moves API', () => {
       expect(Number(itemCount.rows[0].count)).toBe(7);
     });
 
-    it('marks a job with zero matches completed immediately, rather than leaving it pending forever', async () => {
+    it('marks a job with zero matches completed once materialized, rather than leaving it pending forever', async () => {
       const res = await request(app)
         .post('/bulk-moves')
         .set('X-Workspace-Id', workspace.workspaceId)
         .send({ filter: { owner: 'nobody-matches-this' }, targetStageId: workspace.stageBId });
 
       expect(res.status).toBe(201);
-      expect(res.body.status).toBe('completed');
+      expect(res.body.status).toBe('materializing');
+
+      const job = await repository.getJob(workspace.workspaceId, res.body.id);
+      const materialized = await repository.materializeSnapshot(job);
+      expect(materialized.status).toBe('completed');
     });
 
     it('returns the same job handle for a duplicate submission while the original is still active', async () => {
@@ -176,7 +191,7 @@ describe('bulk-moves API', () => {
         : null;
 
       const hash = await readDedupeHash(workspace.workspaceId, filterHash);
-      expect(hash).toEqual({ id: res.body.id, status: 'pending' });
+      expect(hash).toEqual({ id: res.body.id, status: 'materializing' });
     });
   });
 
@@ -187,6 +202,15 @@ describe('bulk-moves API', () => {
         .post('/bulk-moves')
         .set('X-Workspace-Id', workspace.workspaceId)
         .send({ filter: { status: 'open' }, targetStageId: workspace.stageBId });
+
+      const unmaterializedRes = await request(app)
+        .get(`/bulk-moves/${submit.body.id}`)
+        .set('X-Workspace-Id', workspace.workspaceId);
+      expect(unmaterializedRes.body.status).toBe('materializing');
+      expect(unmaterializedRes.body.totalItems).toBe(0);
+
+      const job = await repository.getJob(workspace.workspaceId, submit.body.id);
+      await repository.materializeSnapshot(job);
 
       const res = await request(app)
         .get(`/bulk-moves/${submit.body.id}`)

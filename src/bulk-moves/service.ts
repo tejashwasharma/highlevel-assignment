@@ -6,7 +6,7 @@ export class BulkMovesService {
   constructor(private readonly repository: BulkMovesRepository) {}
 
   async submitBulkMove(input: SubmitBulkMoveInput): Promise<BulkMoveJob> {
-    const job = await this.repository.createJobWithSnapshot(
+    const job = await this.repository.createJobPending(
       input.workspaceId,
       input.filterHash,
       input.filter,

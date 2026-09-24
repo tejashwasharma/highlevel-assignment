@@ -1,4 +1,4 @@
-export type BulkMoveJobStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type BulkMoveJobStatus = 'materializing' | 'pending' | 'running' | 'completed' | 'failed';
 export type BulkMoveJobItemStatus = 'pending' | 'done' | 'skipped_conflict' | 'failed';
 
 export interface BulkMoveFilterInput {

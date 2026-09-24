@@ -9,8 +9,8 @@ exports.up = (pgm) => {
       filter_hash             TEXT NOT NULL,
       filter                  JSONB NOT NULL,
       target_stage_id         UUID NOT NULL REFERENCES stages(id) ON DELETE CASCADE,
-      status                  TEXT NOT NULL DEFAULT 'pending'
-                              CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+      status                  TEXT NOT NULL DEFAULT 'materializing'
+                              CHECK (status IN ('materializing', 'pending', 'running', 'completed', 'failed')),
       total_items             INTEGER NOT NULL DEFAULT 0,
       done_count              INTEGER NOT NULL DEFAULT 0,
       skipped_count           INTEGER NOT NULL DEFAULT 0,
@@ -22,7 +22,7 @@ exports.up = (pgm) => {
 
     CREATE UNIQUE INDEX idx_bulk_move_jobs_dedupe
       ON bulk_move_jobs (workspace_id, filter_hash)
-      WHERE status IN ('pending', 'running');
+      WHERE status IN ('materializing', 'pending', 'running');
 
     CREATE TABLE bulk_move_job_items (
       id                BIGSERIAL PRIMARY KEY,
@@ -36,6 +36,7 @@ exports.up = (pgm) => {
 
     CREATE INDEX idx_job_items_job_id ON bulk_move_job_items (job_id, id);
     CREATE INDEX idx_job_items_job_status ON bulk_move_job_items (job_id, status);
+    CREATE INDEX idx_job_items_opportunity_id ON bulk_move_job_items (opportunity_id);
   `);
 };
 

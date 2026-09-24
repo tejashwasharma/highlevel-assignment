@@ -79,7 +79,7 @@ export class BulkMovesRepository {
     };
   }
 
-  async createJobWithSnapshot(
+ async createJobPending(
     workspaceId: string,
     filterHash: string,
     filter: BulkMoveFilterInput,
@@ -97,8 +97,8 @@ export class BulkMovesRepository {
 
       const inserted = await client.query<BulkMoveJobRow>(
         `INSERT INTO bulk_move_jobs (workspace_id, filter_hash, filter, target_stage_id, status, total_items)
-         VALUES ($1, $2, $3, $4, 'pending', 0)
-         ON CONFLICT (workspace_id, filter_hash) WHERE status IN ('pending', 'running') DO NOTHING
+         VALUES ($1, $2, $3, $4, 'materializing', 0)
+         ON CONFLICT (workspace_id, filter_hash) WHERE status IN ('materializing', 'pending', 'running') DO NOTHING
          RETURNING *`,
         [workspaceId, filterHash, JSON.stringify(filter), targetStageId],
       );
@@ -106,16 +106,20 @@ export class BulkMovesRepository {
       if (inserted.rowCount === 0) {
         const existing = await client.query<BulkMoveJobRow>(
           `SELECT * FROM bulk_move_jobs
-           WHERE workspace_id = $1 AND filter_hash = $2 AND status IN ('pending', 'running')`,
+           WHERE workspace_id = $1 AND filter_hash = $2 AND status IN ('materializing', 'pending', 'running')`,
           [workspaceId, filterHash],
         );
         return BulkMovesRepository.mapJob(existing.rows[0]);
       }
 
-      const job = inserted.rows[0];
+      return BulkMovesRepository.mapJob(inserted.rows[0]);
+    });
+  }
 
-      const filterParams: unknown[] = [workspaceId];
-      const filterClause = BulkMovesRepository.buildFilterConditions(filter, filterParams);
+  async materializeSnapshot(job: BulkMoveJob): Promise<BulkMoveJob> {
+    return this.db.transaction(async (client) => {
+      const filterParams: unknown[] = [job.workspaceId];
+      const filterClause = BulkMovesRepository.buildFilterConditions(job.filter, filterParams);
 
       const matches = await client.query<{ id: string; version: number }>(
         `SELECT id, version FROM opportunities
@@ -142,6 +146,19 @@ export class BulkMovesRepository {
 
       return BulkMovesRepository.mapJob(updatedJobRow.rows[0]);
     });
+  }
+
+  async createJobWithSnapshot(
+    workspaceId: string,
+    filterHash: string,
+    filter: BulkMoveFilterInput,
+    targetStageId: string,
+  ): Promise<BulkMoveJob> {
+    const job = await this.createJobPending(workspaceId, filterHash, filter, targetStageId);
+    if (job.status !== 'materializing') {
+      return job;
+    }
+    return this.materializeSnapshot(job);
   }
 
   async getJob(workspaceId: string, jobId: string): Promise<BulkMoveJob> {
@@ -260,7 +277,7 @@ export class BulkMovesRepository {
   async findNextActiveJob(): Promise<BulkMoveJob | null> {
     const rows = await this.db.query<BulkMoveJobRow>(
       `SELECT * FROM bulk_move_jobs
-       WHERE status IN ('pending', 'running')
+       WHERE status IN ('materializing', 'pending', 'running')
        ORDER BY updated_at ASC
        LIMIT 1`,
     );

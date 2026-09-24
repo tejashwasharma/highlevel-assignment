@@ -26,6 +26,28 @@ async function waitForCompletion(
   }
 }
 
+async function waitForProgress(
+  repository: BulkMovesRepository,
+  workspaceId: string,
+  jobId: string,
+  itemCount: number,
+  timeoutMs: number,
+): Promise<BulkMoveJob> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const job = await repository.getJob(workspaceId, jobId);
+    if (job.doneCount > 0 && job.doneCount < itemCount) {
+      return job;
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `job ${jobId} made no partial progress within ${timeoutMs}ms (status=${job.status}, doneCount=${job.doneCount})`,
+      );
+    }
+    await sleep(20);
+  }
+}
+
 describe('bulk move worker: kill mid-job and resume', () => {
   const pool = getTestPool();
   const repository = new BulkMovesRepository(getTestDatabase());
@@ -55,10 +77,9 @@ describe('bulk move worker: kill mid-job and resume', () => {
     expect(job.totalItems).toBe(ITEM_COUNT);
 
     const firstRun = spawnWorker();
-    await sleep(200);
+    const midState = await waitForProgress(repository, workspace.workspaceId, job.id, ITEM_COUNT, 5000);
     await killWorker(firstRun);
 
-    const midState = await repository.getJob(workspace.workspaceId, job.id);
     expect(midState.status).toBe('running');
     expect(midState.doneCount).toBeGreaterThan(0);
     expect(midState.doneCount).toBeLessThan(ITEM_COUNT);
